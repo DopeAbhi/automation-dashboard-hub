@@ -1,0 +1,72 @@
+name: Generate Aggregated Allure Report
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs daily at midnight UTC
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
+
+jobs:
+  build-dashboard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to publish to gh-pages branch
+
+    steps:
+      - name: Checkout Hub Repository
+        uses: actions/checkout@v3
+
+      # Step 1: Download artifacts from your individual projects
+      # Note: You need a Personal Access Token (PAT) stored as a repository secret (e.g., PAT_TOKEN)
+      - name: Download UI Framework Results
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          github_token: ${{ secrets.PAT_TOKEN }}
+          repo: DopeAbhi/SeleniumFrameWork # Replace with actual UI repo name
+          name: allure-results-ui-project
+          path: all-results/ui-project
+          workflow_conclusion: success
+          continue-on-error: true # Ensure workflow doesn't fail if no artifacts are found
+
+      # Add more download steps for API and Mobile frameworks as needed:
+      # - name: Download API Framework Results
+      #   uses: dawidd6/action-download-artifact@v2
+      #   with:
+      #     github_token: ${{ secrets.PAT_TOKEN }}
+      #     repo: DopeAbhi/API-Framework
+      #     name: allure-results-api-project
+      #     path: all-results/api-project
+      #     continue-on-error: true
+
+      # Step 2: Merge the results
+      - name: Prepare Merged Results
+        run: |
+          mkdir -p target/allure-results
+          cp -R all-results/*/* target/allure-results/ || true
+
+      # Step 3: Check out existing gh-pages to preserve history
+      - name: Get Allure history
+        uses: actions/checkout@v3
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      # Step 4: Generate the Allure Report
+      - name: Allure Report action from marketplace
+        uses: simple-elf/allure-report-action@master
+        if: always()
+        with:
+          allure_results: target/allure-results
+          allure_history: allure-history
+          gh_pages: gh-pages
+          keep_reports: 20
+
+      # Step 5: Deploy to GitHub Pages
+      - name: Deploy report to Github Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
